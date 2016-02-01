@@ -1,0 +1,7 @@
+<launch>
+  <node pkg="hector_monstertruck_driver" name="hector_monstertruck_driver" type="hector_monstertruck_driver_node" output="screen">
+    <remap from="cmd_vel" to="monstertruck_driver/cmd_vel" />
+    <rosparam command="load" file="$(find hector_monstertruck_driver)/params/hector_monstertruck_driver.yaml"/>
+  </node>
+</launch>
+
