@@ -6,6 +6,7 @@ project(hector_monstertruck_driver)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  monstertruck_msgs
 )
 
 ## System dependencies are found with CMake's conventions
