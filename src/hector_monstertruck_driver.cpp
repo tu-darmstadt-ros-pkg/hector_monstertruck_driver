@@ -195,8 +195,8 @@ bool HectorMonstertruckDriver::readDataFromInterfaceBoard()
         processed++;
         pos += length + UBLOX_FRAMESIZE;
 
-        ROS_INFO("Class ID: %x", header.classId);
-        ROS_INFO("Message ID: %x", header.messageId);
+        ROS_DEBUG("Class ID: %x", header.classId);
+        ROS_DEBUG("Message ID: %x", header.messageId);
 
         if (header.classId != NAV_INTERFACE_VEHICLE_CLASS){
             ROS_WARN("Class ID missmatch");
@@ -209,7 +209,7 @@ bool HectorMonstertruckDriver::readDataFromInterfaceBoard()
                 ROS_ERROR("Size-mismatch for NAV_API_RAW_STATUS_DATA: %d",length);
                 continue;
             }
-            ROS_INFO("STATUS Message recieved");
+            ROS_DEBUG("STATUS Message recieved");
             NAV_API_RAW_STATUS_DATA *raw = (NAV_API_RAW_STATUS_DATA *) payload;
             static const double VOLTAGE_FILTER_T = 1.0;
 
@@ -238,7 +238,7 @@ bool HectorMonstertruckDriver::readDataFromInterfaceBoard()
                 ROS_ERROR("Size-mismatch for NAV_API_RAW_IMU_DATA: %d", length);
                 continue;
             }
-            ROS_INFO("IMU Message recieved");
+            ROS_DEBUG("IMU Message recieved");
             NAV_API_RAW_IMU_DATA *raw = (NAV_API_RAW_IMU_DATA *) payload;
 
             data.imu.header.seq++;
@@ -374,8 +374,9 @@ bool HectorMonstertruckDriver::readDataFromInterfaceBoard()
     }
 
     ROS_INFO("processed: %d", processed);
-    ROS_INFO("checksum_error: %d", checksum_errors);
-
+    if(checksum_errors > 0){
+        ROS_WARN("checksum_error: %d", checksum_errors);
+    }
     if (pos == 0 && ret < 0) {
         ROS_ERROR("Error in Ublox Interpreter: %s", interfaceUBlox.strerror(ret));
         // VehicleAPI::dump(VehicleAPI::DEBUG, 0, (char *)(bufferIn + pos), bufferInLength - pos);

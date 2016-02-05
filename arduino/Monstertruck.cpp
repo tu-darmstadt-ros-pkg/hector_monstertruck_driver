@@ -38,10 +38,10 @@ unsigned int inputPos = 0; //Position inside buffer where next char can be place
 
 int packagePos = 0; //Start-Position of next Package
 
-bool output_started = false; //Should the board give output via Serial
+bool messages_enabled = true;
+uint32_t messages_send_time = 0;
 
-uint32_t output_time = 0; //Time where the next packages should be send
-uint32_t output_cooldown = 0; //Timeout between the output messages
+bool output_started = false; //Should the board give output via Serial
 
 uint32_t status_message_send_time = 0;
 
@@ -62,6 +62,18 @@ void interruptRad3() {
 void interruptRad4() {
 	count_rad_4++;
 }
+
+int16_t gyroX = 0;
+int16_t gyroY = 0;
+int16_t gyroZ = 0;
+int16_t acclX = 0;
+int16_t acclY = 0;
+int16_t acclZ = 0;
+int16_t tempX = 0;
+int16_t tempY = 0;
+int16_t tempZ = 0;
+
+uint32_t imu_read_time = 0;
 
 //The setup function is called once at startup of the sketch
 void setup() {
@@ -90,7 +102,10 @@ State state = SYNC_PACKAGE;
 
 // The loop function is called in an endless loop
 void loop() {
-
+  if(millis() > imu_read_time){ //TODO improve
+    imuRead(gyroX, gyroY, gyroZ, acclX, acclY, acclZ, tempX, tempY, tempZ);
+    imu_read_time = millis() + 100;
+  }
 	readPackage();
 
 	switch (state) {
@@ -138,8 +153,8 @@ void loop() {
  * Read packages from serial
  */
 void readPackage() {
-
-	while (Serial.available() > 0) {
+  uint32_t timeout = millis() + 100;
+	while (Serial.available() > 0 && millis() < timeout) {
 		size_t length = 100;
 		char buf[length];
 		length = Serial.readBytes(buf, length);
@@ -274,9 +289,8 @@ bool handlePreloadPackage() {
 	serialPrint("PreloadLow: ", preloadLow, HEX);
 	serialPrint("PreloadHigh: ", preloadHigh, HEX);
 
-	output_started = true;
-	output_cooldown = 100;
-	serialPrint("setting output_cooldown to (ms) ", output_cooldown);
+  //TODO set Time
+  messages_enabled = true;
 
 	return true;
 }
@@ -314,12 +328,18 @@ void moveBufferContent() {
 void sendPackage() {
 
   sendStatusMessage();
-  
-	if (output_started && output_time < millis()) {
-		serialPrint("Sending packages");	
-		sendOdometrieMessage();
-		output_time = millis() + output_cooldown;
-	}
+
+  if(messages_enabled){
+    if(millis() > messages_send_time){
+      
+      sendOdometrieMessage();
+
+      sendImuMessage();
+      
+      messages_send_time = millis() + 1000;
+    }
+    
+  }
 
 }
 
@@ -366,7 +386,7 @@ void sendStatusMessage() {
 
 	Serial.write(buffer, STATUS_MESSAGE_TOTAL_LENGTH);
 
-  status_message_send_time = millis() + 1000;
+  status_message_send_time = millis() + 100;
 }
 
 #define ODO_MESSAGE_TOTAL_LENGTH 28
@@ -391,17 +411,6 @@ void sendOdometrieMessage() {
 void sendImuMessage() {
 	uint8_t buffer[IMU_MESSAGE_TOTAL_LENGTH];
 
-	int16_t gyroX = 0;
-	int16_t gyroY = 0;
-	int16_t gyroZ = 0;
-	int16_t acclX = 0;
-	int16_t acclY = 0;
-	int16_t acclZ = 0;
-	int16_t tempX = 0;
-	int16_t tempY = 0;
-	int16_t tempZ = 0;
-
-	imuRead(gyroX, gyroY, gyroZ, acclX, acclY, acclZ, tempX, tempY, tempZ);
 
 	ubloxSetHeader(buffer, NAV_INTERFACE_VEHICLE_CLASS,
 			NAV_INTERFACE_COM_ID_IMU, 32);

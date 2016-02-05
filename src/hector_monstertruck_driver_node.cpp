@@ -17,12 +17,14 @@ int main(int argc, char **argv)
       exit(-1);
   }
 
-  ros::Rate loop_rate(10);
+  ros::Rate loop_rate(50);
 
   while (ros::ok()){
       ros::spinOnce();
 
       monstertruck_driver.spin();
+
+      ros::spinOnce();
 
       loop_rate.sleep();
   }

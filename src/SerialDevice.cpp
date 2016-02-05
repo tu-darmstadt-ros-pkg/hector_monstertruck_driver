@@ -67,7 +67,7 @@ bool SerialDevice::receive(void *message, size_t *size)
     FD_ZERO(&rfds);
     FD_SET(fd_com_port,&rfds);
     tv.tv_sec = 0;
-    tv.tv_usec = 100;
+    tv.tv_usec = 10;
     if (select(fd_com_port+1,&rfds,NULL,NULL,&tv)) {
         *size= read(fd_com_port,message, *size);
         return true;
