@@ -43,6 +43,8 @@ bool output_started = false; //Should the board give output via Serial
 uint32_t output_time = 0; //Time where the next packages should be send
 uint32_t output_cooldown = 0; //Timeout between the output messages
 
+uint32_t status_message_send_time = 0;
+
 uint32_t count_rad_1 = 0;
 uint32_t count_rad_2 = 0;
 uint32_t count_rad_3 = 0;
@@ -129,7 +131,7 @@ void loop() {
 		break;
 	}
 
-	//sendPackage();
+	sendPackage();
 }
 
 /**
@@ -310,12 +312,15 @@ void moveBufferContent() {
  * Check if packages should be sent to pc.
  */
 void sendPackage() {
+
+  sendStatusMessage();
+  
 	if (output_started && output_time < millis()) {
-		serialPrint("Sending packages");
-		sendStatusMessage();
+		serialPrint("Sending packages");	
 		sendOdometrieMessage();
 		output_time = millis() + output_cooldown;
 	}
+
 }
 
 int voltage1Pin = A0;
@@ -330,6 +335,11 @@ void voltageRead(int &inputVoltage1, int &inputVoltage2){
  * Send single status message to pc.
  */
 void sendStatusMessage() {
+
+  if(millis() < status_message_send_time){
+    return;
+  }
+  
 	serialPrint("Sending status package");
 	uint8_t buffer[STATUS_MESSAGE_TOTAL_LENGTH];
 
@@ -355,6 +365,8 @@ void sendStatusMessage() {
 	ubloxSetChecksum(buffer, 19);
 
 	Serial.write(buffer, STATUS_MESSAGE_TOTAL_LENGTH);
+
+  status_message_send_time = millis() + 1000;
 }
 
 #define ODO_MESSAGE_TOTAL_LENGTH 28

@@ -81,7 +81,7 @@ public:
 
 private:
 
-    void servoCommandCb(const monstertruck_msgs::ServoCommand::ConstPtr& msg);
+    void servoCommandsCb(const monstertruck_msgs::ServoCommands::ConstPtr& msg);
     void backwardCb(const std_msgs::Bool::ConstPtr& msg);
 
     bool readDataFromInterfaceBoard();

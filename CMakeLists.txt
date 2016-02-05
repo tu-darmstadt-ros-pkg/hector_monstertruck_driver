@@ -110,11 +110,11 @@ catkin_package(
 ###########
 
 file(GLOB INCLUDE_FILES
-    "*/*.h"
+    "include/*.h"
 )
 
 file(GLOB SRC_FILES
-    "*/*.cpp"
+    "src/*.cpp"
 )
 
 #list(REMOVE_ITEM SRC_FILES "src/hector_monstertruck_driver_node.cpp")

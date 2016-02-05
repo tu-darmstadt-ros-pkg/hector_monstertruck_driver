@@ -18,7 +18,7 @@ HectorMonstertruckDriver::HectorMonstertruckDriver() :
     imuPub_ = _pnh.advertise<sensor_msgs::Imu>("imu", 1000);
     compassPub_ = _pnh.advertise<monstertruck_msgs::Compass>("compass", 1000);
 
-    servoCommandSub_ = _pnh.subscribe("servoCommand", 1000, &HectorMonstertruckDriver::servoCommandCb, this);
+    servoCommandSub_ = _pnh.subscribe("servoCommand", 1000, &HectorMonstertruckDriver::servoCommandsCb, this);
     backwardSub_ = _pnh.subscribe("backward", 1000, &HectorMonstertruckDriver::backwardCb, this);
 
     _pnh.param<int>("axis_AccelX", axis_AccelX, -1);
@@ -62,8 +62,9 @@ HectorMonstertruckDriver::HectorMonstertruckDriver() :
 
 }
 
-void HectorMonstertruckDriver::servoCommandCb(const monstertruck_msgs::ServoCommand::ConstPtr& msg){
+void HectorMonstertruckDriver::servoCommandsCb(const monstertruck_msgs::ServoCommands::ConstPtr& msg){
     //TODO need to store in data.servoCommands
+    data.servoCommands = *msg;
 }
 
 void HectorMonstertruckDriver::backwardCb(const std_msgs::Bool::ConstPtr& msg){
@@ -73,8 +74,11 @@ void HectorMonstertruckDriver::backwardCb(const std_msgs::Bool::ConstPtr& msg){
 
 bool HectorMonstertruckDriver::configure(){
     ROS_INFO("Configure Device ...");
+    ROS_INFO("Com-Port: %s", this->com_port.c_str());
+    ROS_INFO("Baudrate: %d", this->baudrate);
     device = new SerialDevice(this->com_port, this->baudrate);
     if (!device->configure()) {
+        ROS_WARN("...failed");
         delete device;
         device = 0;
         return false;
@@ -106,7 +110,7 @@ bool HectorMonstertruckDriver::start()
         return false;
     }
 
-    ROS_INFO("ready and running.");
+    ROS_WARN("ready and running.");
 
     return true;
 
@@ -149,7 +153,7 @@ void HectorMonstertruckDriver::spin()
 
 bool HectorMonstertruckDriver::readDataFromInterfaceBoard()
 {
-    ROS_INFO("Reading data from interface board");
+    ROS_DEBUG("Reading data from interface board");
     void *payload;
     unsigned int pos, length, checksum_errors, processed;
     UBloxHeader header;
@@ -159,11 +163,11 @@ bool HectorMonstertruckDriver::readDataFromInterfaceBoard()
 
     bufferInLength = sizeof(bufferIn);
 
-    send(0,0, NAV_INTERFACE_VEHICLE_CLASS, NAV_INTERFACE_COM_ID_PC_OUT);
-    sendDataToInterfaceBoard(); //Inform Interface-Board to Send Data once
+    //send(0,0, NAV_INTERFACE_VEHICLE_CLASS, NAV_INTERFACE_COM_ID_PC_OUT);
+    //sendDataToInterfaceBoard(); //Inform Interface-Board to Send Data once
 
     if (!device->receive(bufferIn, &bufferInLength)) {
-        ROS_ERROR("Could not read from Monstertruck device");
+        ROS_DEBUG("No data present");
         return false;
     }
 
@@ -191,7 +195,13 @@ bool HectorMonstertruckDriver::readDataFromInterfaceBoard()
         processed++;
         pos += length + UBLOX_FRAMESIZE;
 
-        if (header.classId != NAV_INTERFACE_VEHICLE_CLASS) continue;
+        ROS_INFO("Class ID: %x", header.classId);
+        ROS_INFO("Message ID: %x", header.messageId);
+
+        if (header.classId != NAV_INTERFACE_VEHICLE_CLASS){
+            ROS_WARN("Class ID missmatch");
+            continue;
+        }
         switch (header.messageId)
         {
         case NAV_INTERFACE_COM_ID_STATUS: {
@@ -199,6 +209,7 @@ bool HectorMonstertruckDriver::readDataFromInterfaceBoard()
                 ROS_ERROR("Size-mismatch for NAV_API_RAW_STATUS_DATA: %d",length);
                 continue;
             }
+            ROS_INFO("STATUS Message recieved");
             NAV_API_RAW_STATUS_DATA *raw = (NAV_API_RAW_STATUS_DATA *) payload;
             static const double VOLTAGE_FILTER_T = 1.0;
 
@@ -227,6 +238,7 @@ bool HectorMonstertruckDriver::readDataFromInterfaceBoard()
                 ROS_ERROR("Size-mismatch for NAV_API_RAW_IMU_DATA: %d", length);
                 continue;
             }
+            ROS_INFO("IMU Message recieved");
             NAV_API_RAW_IMU_DATA *raw = (NAV_API_RAW_IMU_DATA *) payload;
 
             data.imu.header.seq++;
@@ -474,13 +486,20 @@ bool HectorMonstertruckDriver::configure(void *message, size_t size, uint8_t cla
         while(timeout-- > 0)
         {
             updatedStatus = false;
-            if (!readDataFromInterfaceBoard()) return false;
+            if (!readDataFromInterfaceBoard()){
+                ROS_INFO("configure: Waiting for successful read");
+                usleep(100 * 1000);
+                continue; //TODO consider wait
+            }
 
             if (updatedStatus)
             {
                 ROS_DEBUG("CommandsProcessed: %d ErrorId: %d ErrorValue: %d", CommandsProcessed, ErrorId , ErrorValue);
-                if (step == 0 && CommandsProcessed > 0) step = 1;
-                if (step == 1 && GpsSendQueueLoad == 0) return true;
+                if (CommandsProcessed > 0){
+                    return true;
+                }
+            }else{
+                ROS_INFO("No status update");
             }
         }
 

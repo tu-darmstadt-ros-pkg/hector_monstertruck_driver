@@ -18,5 +18,5 @@ c0_GyroZ: 0.02021751401980198536989519
 c1_GyroZ: 0.0003196569999999999923609439
 c0_CompassX: 0
 c0_CompassY: 0
-com_port: /dev/ttyS0
-baudrate: 9600
+com_port: /dev/ttyUSB0
+baudrate: 115200
