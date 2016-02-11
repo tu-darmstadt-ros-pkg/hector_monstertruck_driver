@@ -1,7 +1,11 @@
 <launch>
-  <node pkg="hector_monstertruck_driver" name="hector_monstertruck_driver" type="hector_monstertruck_driver_node" output="screen">
-    <remap from="cmd_vel" to="monstertruck_driver/cmd_vel" />
-    <rosparam command="load" file="$(find hector_monstertruck_driver)/params/hector_monstertruck_driver.yaml"/>
+  <!--    
+  <node pkg="rosserial_python" type="serial_node.py" name="controller_arduino" args="/dev/ttyUSB0" output="screen">
   </node>
+  -->
+  
+  <include file="$(find rosserial_server)/launch/serial.launch">
+    <arg name="port" value="/dev/ttyUSB0" />
+  </include>
 </launch>
 
