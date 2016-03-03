@@ -10,8 +10,9 @@
 #include <monstertruck_msgs/Status.h>
 #include <monstertruck_msgs/RawOdometry.h>
 #include <sensor_msgs/Imu.h>
-//#include <monstertruck_msgs/ServoCommands.h>
+#include <monstertruck_msgs/ServoCommands.h>
 #include <std_msgs/Bool.h>
+#include <std_msgs/Float32.h>
 
 #include <monstertruck_model.h>
 
@@ -27,9 +28,33 @@ ros::Publisher odom_pub("odom", &odom_msg);
 sensor_msgs::Imu imu_msg;
 ros::Publisher imu_pub("imu", &imu_msg);
 
+bool publish_gyroX = true;
+std_msgs::Float32 gyroX_msg;
+ros::Publisher gyroX_pub("gyroX", &gyroX_msg);
+
+bool publish_gyroY = true;
+std_msgs::Float32 gyroY_msg;
+ros::Publisher gyroY_pub("gyroY", &gyroY_msg);
+
+bool publish_gyroZ = true;
+std_msgs::Float32 gyroZ_msg;
+ros::Publisher gyroZ_pub("gyroZ", &gyroZ_msg);
+
+bool publish_acclX = false;
+std_msgs::Float32 acclX_msg;
+ros::Publisher acclX_pub("acclX", &acclX_msg);
+
+bool publish_acclY = false;
+std_msgs::Float32 acclY_msg;
+ros::Publisher acclY_pub("acclY", &acclY_msg);
+
+bool publish_acclZ = false;
+std_msgs::Float32 acclZ_msg;
+ros::Publisher acclZ_pub("acclZ", &acclZ_msg);
+
 //#TODO: monstertruck_msgs/ServoCommand.h:17:25: error: enumerator value for ‘DISABLE’ is not an integer constant
-//void servo_commands_cb( const monstertruck_msgs::ServoCommands& msg);
-//ros::Subscriber<monstertruck_msgs::ServoCommands> servo_commands_sub("servoCommands", servo_commands_cb);
+void servo_commands_cb( const monstertruck_msgs::ServoCommands& msg);
+ros::Subscriber<monstertruck_msgs::ServoCommands> servo_commands_sub("servoCommands", servo_commands_cb);
 
 void backwards_cb( const std_msgs::Bool& msg);
 ros::Subscriber<std_msgs::Bool> backwards_sub("backwards", backwards_cb);
@@ -38,6 +63,7 @@ void publishStatus();
 void voltageRead(float &inputVoltage1, float &inputVoltage2);
 void publishOdom();
 void publishImu();
+void processImu();
 
 uint32_t count_rad_1 = 0;
 uint32_t count_rad_2 = 0;
@@ -70,7 +96,7 @@ unsigned short spi_adis16350_read_once(byte Address) {
     digitalWrite(IMU_CS, LOW);
     SPI.transfer(Address);
     SPI.transfer(0x00);
-    delay(10);
+    //delay(10);
     digitalWrite(IMU_CS, HIGH);
     unsigned short ReadData = 0;
     digitalWrite(IMU_CS, LOW);
@@ -78,7 +104,7 @@ unsigned short spi_adis16350_read_once(byte Address) {
     ReadData = SPI.transfer(Address);
     ReadData = ReadData << 8;
     ReadData += SPI.transfer(0x00);
-    delay(10);
+    //delay(10);
     digitalWrite(IMU_CS, HIGH);
     return ReadData;
 }
@@ -91,7 +117,7 @@ unsigned short spi_adis16350_read(byte Address) {
     ReadData = SPI.transfer(Address);
     ReadData = ReadData << 8;
     ReadData += SPI.transfer(0x00);
-    delay(10);
+    //delay(10);
     digitalWrite(IMU_CS, HIGH);
 
     return ReadData;
@@ -106,16 +132,18 @@ unsigned short spi_adis16350_write(byte Address, byte Data) {
     ReadData = SPI.transfer(Address);
     ReadData = ReadData << 8;
     ReadData += SPI.transfer(Data);
-    delay(10);
+    //delay(10);
     digitalWrite(IMU_CS, HIGH);
 
     return ReadData;
 }
 
 int16_t convert_adisData(uint16_t gyroOut){
-    gyroOut = gyroOut & 0x3FFF;
-    if((gyroOut >> 13) != 0){
-        gyroOut = gyroOut | 0xC000;
+    gyroOut = gyroOut & 0x3FFF; //Remove leading status bits
+    if((gyroOut >> 13) != 0){ //Is negativ number
+        int16_t out = (int16_t) gyroOut;
+        out = out - 16384;
+        return out;
     }
     return (int16_t) gyroOut;
 }
@@ -136,23 +164,38 @@ void initIMU() {
     delay(10); //Wait a few milliseconds
     // configure offsets
     spi_adis16350_write(0x1B, 0x00);
+    delay(10);
     spi_adis16350_write(0x1A, 0x00); // XGYRO_OFF = 0x0000
+    delay(10);
     spi_adis16350_write(0x1D, 0x00);
+    delay(10);
     spi_adis16350_write(0x1C, 0x00); // YGYRO_OFF = 0x0000
+    delay(10);
     spi_adis16350_write(0x1F, 0x00);
+    delay(10);
     spi_adis16350_write(0x1E, 0x00); // ZGYRO_OFF = 0x0000
+    delay(10);
     spi_adis16350_write(0x21, 0x00);
+    delay(10);
     spi_adis16350_write(0x20, 0x00); // XACCL_OFF = 0x0000
+    delay(10);
     spi_adis16350_write(0x23, 0x00);
+    delay(10);
     spi_adis16350_write(0x22, 0x00); // YACCL_OFF = 0x0000
+    delay(10);
     spi_adis16350_write(0x25, 0x00);
+    delay(10);
     spi_adis16350_write(0x24, 0x00); // ZACCL_OFF = 0x0000
-
+    delay(10);
     // configure sample rate and sensitivity/range
     spi_adis16350_write(0x37, 0x00);
+    delay(10);
     spi_adis16350_write(0x36, 0x01); // SMPL_PRD = 0x0001
+    delay(10);
     spi_adis16350_write(0x39, 0x04);
+    delay(10);
     spi_adis16350_write(0x38, 0x02); // SENS/AVG = 0x0402
+    delay(10);
 }
 
 
@@ -181,107 +224,137 @@ int axis_AccelX, axis_AccelY, axis_AccelZ, axis_GyroX, axis_GyroY, axis_GyroZ;
 float c0_AccelX, c1_AccelX, c0_AccelY, c1_AccelY, c0_AccelZ, c1_AccelZ, c0_GyroX, c1_GyroX, c0_GyroY, c1_GyroY, c0_GyroZ, c1_GyroZ;
 float c0_CompassX, c0_CompassY;
 
+float ACCEL_SCALE = 0.002522 * 9.81; //LSB to m/s^2
+float GYRO_SCALE = 0.07326 * 0.017453293; //LSB to rad/sec
+
 void readParams(){
 
-    axis_AccelX = -1;
-    nh.getParam("axis_AccelX", &axis_AccelX);
+    axis_AccelX = 1;
+    //nh.getParam("axis_AccelX", &axis_AccelX);
 
-    axis_AccelY = -1;
-    nh.getParam("axis_AccelY", &axis_AccelY);
+    axis_AccelY = 0;
+    //nh.getParam("axis_AccelY", &axis_AccelY);
 
-    axis_AccelZ = -1;
-    nh.getParam("axis_AccelZ", &axis_AccelZ);
+    axis_AccelZ = 2;
+    //nh.getParam("axis_AccelZ", &axis_AccelZ);
 
-    axis_GyroX = -1;
-    nh.getParam("axis_GyroX", &axis_GyroX);
+    axis_GyroX = 1;
+    //nh.getParam("axis_GyroX", &axis_GyroX);
 
-    axis_GyroY = -1;
-    nh.getParam("axis_GyroY", &axis_GyroY);
+    axis_GyroY = 0;
+    //nh.getParam("axis_GyroY", &axis_GyroY);
 
-    axis_GyroZ = -1;
-    nh.getParam("axis_GyroZ", &axis_GyroZ);
+    axis_GyroZ = 2;
+    //nh.getParam("axis_GyroZ", &axis_GyroZ);
 
-    c0_AccelX = 0.0f;
-    nh.getParam("c0_AccelX", &c0_AccelX);
+    //c0_AccelX = 0.1712259326732673281323827f;
+    c0_AccelX = 0;
+    //nh.getParam("c0_AccelX", &c0_AccelX);
 
-    c1_AccelX = 0.0f;
-    nh.getParam("c1_AccelX", &c1_AccelX);
+    //c1_AccelX = 0.006185200000000000072897244f;
+    c1_AccelX = ACCEL_SCALE;
+    //nh.getParam("c1_AccelX", &c1_AccelX);
 
-    c0_AccelY = 0.0f;
-    nh.getParam("c0_AccelY", &c0_AccelY);
+    //c0_AccelY = 1.816366653465347091866988f;
+    c0_AccelY = 0;
+    //nh.getParam("c0_AccelY", &c0_AccelY);
 
-    c1_AccelY = 0.0f;
-    nh.getParam("c1_AccelY", &c1_AccelY);
+    //c1_AccelY = -0.006185200000000000072897244f;
+    c1_AccelY = ACCEL_SCALE;
+    //nh.getParam("c1_AccelY", &c1_AccelY);
 
-    c0_AccelZ = 0.0f;
-    nh.getParam("c0_AccelZ", &c0_AccelZ);
+    //c0_AccelZ = -2.177110661386136847283979f;
+    c0_AccelZ = 0;
+    //nh.getParam("c0_AccelZ", &c0_AccelZ);
 
-    c1_AccelZ = 0.0f;
-    nh.getParam("c1_AccelZ", &c1_AccelZ);
+    //c1_AccelZ = -0.006185200000000000072897244f;
+    c1_AccelZ = ACCEL_SCALE;
+    //nh.getParam("c1_AccelZ", &c1_AccelZ);
 
-    c0_GyroX = 0.0f;
-    nh.getParam("c0_GyroX", &c0_GyroX);
+    //c0_GyroX = 0.05943721247524752504531875f;
+    c0_GyroX = 0;
+    //nh.getParam("c0_GyroX", &c0_GyroX);
 
-    c1_GyroX = 0.0f;
-    nh.getParam("c1_GyroX", &c1_GyroX);
+    //c1_GyroX = -0.0003196569999999999923609439f;
+    c1_GyroX = GYRO_SCALE;
+    //nh.getParam("c1_GyroX", &c1_GyroX);
 
-    c0_GyroY = 0.0f;
-    nh.getParam("c0_GyroY", &c0_GyroY);
+    //c0_GyroY = 0.001126711801980199989525744f;
+    c0_GyroY = 0;
+    //nh.getParam("c0_GyroY", &c0_GyroY);
 
-    c1_GyroY = 0.0f;
-    nh.getParam("c1_GyroY", &c1_GyroY);
+    //c1_GyroY = 0.0003196569999999999923609439f;
+    c1_GyroY = GYRO_SCALE;
+    //nh.getParam("c1_GyroY", &c1_GyroY);
 
-    c0_GyroZ = 0.0f;
-    nh.getParam("c0_GyroZ", &c0_GyroZ);
+    //c0_GyroZ = 0.02021751401980198536989519f;
+    c0_GyroZ = 0;
+    //nh.getParam("c0_GyroZ", &c0_GyroZ);
 
-    c1_GyroZ = 0.0f;
-    nh.getParam("c1_GyroZ", &c1_GyroZ);
+    //c1_GyroZ = 0.0003196569999999999923609439f;
+    c1_GyroZ = GYRO_SCALE;
+    //nh.getParam("c1_GyroZ", &c1_GyroZ);
 
     c0_CompassX = 0.0f;
-    nh.getParam("c0_CompassX", &c0_CompassX);
+    //nh.getParam("c0_CompassX", &c0_CompassX);
 
     c0_CompassY = 0.0f;
-    nh.getParam("c0_CompassY", &c0_CompassY);
+    //nh.getParam("c0_CompassY", &c0_CompassY);
 
 }
 
 void setup()
 {
 
-  initIMU();
+    initIMU();
 
-  nh.initNode();
+    nh.initNode();
 
-  //TODO Parameter not working right now
-  //while(!nh.connected()) {nh.spinOnce();}
+    //TODO Parameter not working right now
+    //while(!nh.connected()) {nh.spinOnce();}
 
-  //readParams();
+    readParams();
 
-  nh.advertise(status_pub);
-  nh.advertise(odom_pub);
-  nh.advertise(imu_pub);
+    nh.advertise(status_pub);
+    nh.advertise(odom_pub);
+    nh.advertise(imu_pub);
 
-  nh.subscribe(backwards_sub);
+    if(publish_gyroX){
+        nh.advertise(gyroX_pub);
+    }
+    if(publish_gyroY){
+        nh.advertise(gyroY_pub);
+    }
+    if(publish_gyroZ){
+        nh.advertise(gyroZ_pub);
+    }
+    if(publish_acclX){
+        nh.advertise(acclX_pub);
+    }
+    if(publish_acclY){
+        nh.advertise(acclY_pub);
+    }
+    if(publish_acclZ){
+        nh.advertise(acclZ_pub);
+    }
+    nh.subscribe(backwards_sub);
 
-  attachInterrupt(Rad_1, interruptRad1, CHANGE);
-  attachInterrupt(Rad_2, interruptRad2, CHANGE);
-  attachInterrupt(Rad_3, interruptRad3, CHANGE);
-  attachInterrupt(Rad_4, interruptRad4, CHANGE);
+    attachInterrupt(Rad_1, interruptRad1, CHANGE);
+    attachInterrupt(Rad_2, interruptRad2, CHANGE);
+    attachInterrupt(Rad_3, interruptRad3, CHANGE);
+    attachInterrupt(Rad_4, interruptRad4, CHANGE);
 }
 
 void loop()
 {
-  nh.spinOnce();
+    nh.spinOnce();
 
-  publishStatus();
+    publishStatus();
 
-  publishOdom();
+    publishOdom();
 
-  //publishImu(); Slowing down everything to 1hz
+    processImu();
 
-
-
-  delay(10);
 }
 
 void publishStatus(){
@@ -332,9 +405,9 @@ void publishOdom(){
 
 
 void imuRead(int16_t &gyroX, int16_t &gyroY,
-        int16_t &gyroZ, int16_t &acclX, int16_t &acclY,
-        int16_t &acclZ, int16_t &tempX, int16_t &tempY,
-        int16_t &tempZ) {
+             int16_t &gyroZ, int16_t &acclX, int16_t &acclY,
+             int16_t &acclZ, int16_t &tempX, int16_t &tempY,
+             int16_t &tempZ) {
     spi_adis16350_read(0x04);
     delay(100);
     uint16_t gyroX_raw = spi_adis16350_read(0x06);
@@ -357,6 +430,122 @@ void imuRead(int16_t &gyroX, int16_t &gyroY,
     tempY = convert_adisData(spi_adis16350_read(0x14));
     delay(100);
     tempZ = convert_adisData(spi_adis16350_read(0x3C));
+}
+
+enum IMU_STATE{IDLE, GYRO_X, GYRO_Y, GYRO_Z, ACCL_X, ACCL_Y, ACCL_Z, TEMP_X, TEMP_Y, TEMP_Z, MSG} imu_state;
+
+int16_t gyroX = 0;
+int16_t gyroY = 0;
+int16_t gyroZ = 0;
+int16_t acclX = 0;
+int16_t acclY = 0;
+int16_t acclZ = 0;
+int16_t tempX = 0;
+int16_t tempY = 0;
+int16_t tempZ = 0;
+
+uint32_t imu_timeout;
+uint32_t IMU_DELAY = 10;
+
+void processImu(){
+    switch(imu_state){
+    case IDLE:
+        if(imu_timeout < millis()){
+            spi_adis16350_read(0x04);
+            imu_timeout = millis() + IMU_DELAY;
+            imu_state = GYRO_X;
+        }
+        break;
+    case GYRO_X:
+        if(imu_timeout < millis()){
+            uint16_t gyroX_raw = spi_adis16350_read(0x06);
+            gyroX = convert_adisData(gyroX_raw);
+
+            imu_timeout = millis() + IMU_DELAY;
+            imu_state = GYRO_Y;
+            if(publish_gyroX){
+                gyroX_msg.data = gyroX * GYRO_SCALE;
+                gyroX_pub.publish(&gyroX_msg);
+            }
+        }
+        break;
+    case GYRO_Y:
+        if(imu_timeout < millis()){
+            uint16_t gyroY_raw = spi_adis16350_read(0x08);
+            gyroY = convert_adisData(gyroY_raw);
+            imu_timeout = millis() + IMU_DELAY;
+            imu_state = GYRO_Z;
+            if(publish_gyroY){
+                gyroY_msg.data = gyroY * GYRO_SCALE;
+                gyroY_pub.publish(&gyroY_msg);
+            }
+        }
+        break;
+    case GYRO_Z:
+        if(imu_timeout < millis()){
+            uint16_t gyroZ_raw = spi_adis16350_read(0x0A);
+            gyroZ = convert_adisData(gyroZ_raw);
+            imu_timeout = millis() + IMU_DELAY;
+            imu_state = ACCL_X;
+            if(publish_gyroZ){
+                gyroZ_msg.data = gyroZ * GYRO_SCALE;
+                gyroZ_pub.publish(&gyroZ_msg);
+            }
+        }
+        break;
+    case ACCL_X:
+        if(imu_timeout < millis()){
+            uint16_t raw = spi_adis16350_read(0x0C);
+            acclX = convert_adisData(raw);
+            imu_timeout = millis() + IMU_DELAY;
+            imu_state = ACCL_Y;
+            if(publish_acclX){
+                acclX_msg.data = acclX * ACCEL_SCALE;
+                acclX_pub.publish(&acclX_msg);
+            }
+        }
+        break;
+    case ACCL_Y:
+        if(imu_timeout < millis()){
+            acclY = convert_adisData(spi_adis16350_read(0x0E));
+            imu_timeout = millis() + IMU_DELAY;
+            imu_state = ACCL_Z;
+            if(publish_acclY){
+                acclY_msg.data = acclY * ACCEL_SCALE;
+                acclY_pub.publish(&acclY_msg);
+            }
+        }
+        break;
+    case ACCL_Z:
+        if(imu_timeout < millis()){
+            uint16_t raw = spi_adis16350_read(0x10);
+            acclZ = convert_adisData(raw);
+            imu_timeout = millis() + IMU_DELAY;
+            imu_state = MSG;
+            if(publish_acclZ){
+                acclZ_msg.data = acclZ * ACCEL_SCALE;
+                acclZ_pub.publish(&acclZ_msg);
+            }
+        }
+        break;
+    case MSG:
+
+        imu_msg.header.seq++;
+        imu_msg.header.stamp = nh.now();
+        imu_msg.header.frame_id = "imu";
+
+        imu_msg.angular_velocity.x = gyroX * c1_GyroX  + c0_GyroX;
+        imu_msg.angular_velocity.y = gyroY * c1_GyroY  + c0_GyroY;
+        imu_msg.angular_velocity.z = gyroZ * c1_GyroZ  + c0_GyroZ;
+        imu_msg.linear_acceleration.x = acclX * c1_AccelX + c0_AccelX;
+        imu_msg.linear_acceleration.y = acclY * c1_AccelY + c0_AccelY;
+        imu_msg.linear_acceleration.z = acclZ * c1_AccelZ + c0_AccelZ;
+
+        imu_pub.publish(&imu_msg);
+        imu_state = IDLE;
+        break;
+
+    }
 }
 
 void publishImu(){
@@ -394,7 +583,7 @@ void publishImu(){
     imu_pub.publish(&imu_msg);
 }
 
-/*
+
 void servo_commands_cb( const monstertruck_msgs::ServoCommands& msg){
     for(size_t i = 0; i < msg.servo_length; ++i) {
 
@@ -406,7 +595,7 @@ void servo_commands_cb( const monstertruck_msgs::ServoCommands& msg){
         writeServo(msg.servo[i].id, SValue);
     }
 }
-*/
+
 
 void backwards_cb( const std_msgs::Bool& msg){
     isBackwards = msg.data;
