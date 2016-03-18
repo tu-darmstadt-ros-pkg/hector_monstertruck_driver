@@ -13,6 +13,7 @@
 #include <monstertruck_msgs/ServoCommands.h>
 #include <std_msgs/Bool.h>
 #include <std_msgs/Float32.h>
+#include <std_msgs/UInt32.h>
 
 #include <monstertruck_model.h>
 
@@ -52,7 +53,22 @@ bool publish_acclZ = false;
 std_msgs::Float32 acclZ_msg;
 ros::Publisher acclZ_pub("acclZ", &acclZ_msg);
 
-//#TODO: monstertruck_msgs/ServoCommand.h:17:25: error: enumerator value for ‘DISABLE’ is not an integer constant
+bool publish_rad1 = true;
+std_msgs::UInt32 rad1_msg;
+ros::Publisher rad1_pub("rad1", &rad1_msg);
+
+bool publish_rad2 = true;
+std_msgs::UInt32 rad2_msg;
+ros::Publisher rad2_pub("rad2", &rad2_msg);
+
+bool publish_rad3 = true;
+std_msgs::UInt32 rad3_msg;
+ros::Publisher rad3_pub("rad3", &rad3_msg);
+
+bool publish_rad4 = true;
+std_msgs::UInt32 rad4_msg;
+ros::Publisher rad4_pub("rad4", &rad4_msg);
+
 void servo_commands_cb( const monstertruck_msgs::ServoCommands& msg);
 ros::Subscriber<monstertruck_msgs::ServoCommands> servo_commands_sub("servoCommands", servo_commands_cb);
 
@@ -65,10 +81,10 @@ void publishOdom();
 void publishImu();
 void processImu();
 
-uint32_t count_rad_1 = 0;
-uint32_t count_rad_2 = 0;
-uint32_t count_rad_3 = 0;
-uint32_t count_rad_4 = 0;
+volatile uint32_t count_rad_1 = 0;
+volatile uint32_t count_rad_2 = 0;
+volatile uint32_t count_rad_3 = 0;
+volatile uint32_t count_rad_4 = 0;
 
 #define Rad_1 2 //Pin 21
 #define Rad_2 3 //Pin 20
@@ -217,7 +233,8 @@ bool writeServo(uint8_t servo, uint16_t position) {
     if (position > 2000) {
         position = 2000;
     }
-    return false;
+    servos[servo-1].write(position);
+    return true;
 }
 
 int axis_AccelX, axis_AccelY, axis_AccelZ, axis_GyroX, axis_GyroY, axis_GyroZ;
@@ -306,7 +323,14 @@ void readParams(){
 void setup()
 {
 
+    attachInterrupt(Rad_1, interruptRad1, CHANGE);
+    attachInterrupt(Rad_2, interruptRad2, CHANGE);
+    attachInterrupt(Rad_3, interruptRad3, CHANGE);
+    attachInterrupt(Rad_4, interruptRad4, CHANGE);
+
     initIMU();
+
+    initServos();
 
     nh.initNode();
 
@@ -318,6 +342,8 @@ void setup()
     nh.advertise(status_pub);
     nh.advertise(odom_pub);
     nh.advertise(imu_pub);
+    nh.subscribe(backwards_sub);
+    nh.subscribe(servo_commands_sub);
 
     if(publish_gyroX){
         nh.advertise(gyroX_pub);
@@ -337,12 +363,23 @@ void setup()
     if(publish_acclZ){
         nh.advertise(acclZ_pub);
     }
-    nh.subscribe(backwards_sub);
 
-    attachInterrupt(Rad_1, interruptRad1, CHANGE);
-    attachInterrupt(Rad_2, interruptRad2, CHANGE);
-    attachInterrupt(Rad_3, interruptRad3, CHANGE);
-    attachInterrupt(Rad_4, interruptRad4, CHANGE);
+    if(publish_rad1){
+        nh.advertise(rad1_pub);
+    }
+
+    if(publish_rad2){
+        nh.advertise(rad2_pub);
+    }
+
+    if(publish_rad3){
+        nh.advertise(rad3_pub);
+    }
+
+    if(publish_rad4){
+        nh.advertise(rad4_pub);
+    }
+
 }
 
 void loop()
@@ -374,6 +411,26 @@ void voltageRead(float &inputVoltage1, float &inputVoltage2){
 bool isBackwards = false;
 
 void publishOdom(){
+
+    if(publish_rad1){
+        rad1_msg.data = count_rad_1;
+        rad1_pub.publish(&rad1_msg);
+    }
+
+    if(publish_rad2){
+        rad2_msg.data = count_rad_2;
+        rad2_pub.publish(&rad2_msg);
+    }
+
+    if(publish_rad3){
+        rad3_msg.data = count_rad_3;
+        rad3_pub.publish(&rad3_msg);
+    }
+
+    if(publish_rad4){
+        rad4_msg.data = count_rad_4;
+        rad4_pub.publish(&rad4_msg);
+    }
 
     float sign = 1.0;
 
