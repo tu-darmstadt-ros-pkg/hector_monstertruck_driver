@@ -444,11 +444,6 @@ void publishOdom(){
     odom_msg.header.seq++;
     odom_msg.header.stamp = nh.now();
 
-    //fake rad 2
-    long diff_right = count_rad_4 - count_rad_3;
-    count_rad_2 = count_rad_1 - diff_right;
-
-
     odom_msg.tics_fl = count_rad_1;     // front left
     odom_msg.tics_rl = count_rad_2;     // rear left
     odom_msg.tics_rr = count_rad_3;     // rear right
